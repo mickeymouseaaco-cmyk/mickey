@@ -5,6 +5,7 @@
  * - onCoupleDeleted: when either partner unpairs, remove every shared doc and file.
  * - fadeDisappearingNotes: hourly, deletes disappearing notes (and their media) past their time.
  * - transcribeVoiceNote: if the sender opted in, adds a transcript to their voice note.
+ * - onAccountDeleted: when someone deletes their account, remove all their data and files.
  */
 import { initializeApp } from 'firebase-admin/app';
 import { v2 as speech } from '@google-cloud/speech';
@@ -14,6 +15,8 @@ import { logger } from 'firebase-functions';
 import { defineString } from 'firebase-functions/params';
 import { onDocumentCreated, onDocumentDeleted } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+// Auth deletion triggers only exist in the 1st-gen API.
+import { auth as authV1 } from 'firebase-functions/v1';
 
 initializeApp();
 const db = getFirestore();
@@ -97,6 +100,27 @@ export const onCoupleDeleted = onDocumentDeleted('couples/{cid}', async (event) 
       if (snap.exists && snap.data()?.coupleId === cid) await userRef.update({ coupleId: null });
     }),
   );
+});
+
+/**
+ * "Delete my account" (Settings). The app unpairs first; this removes whatever
+ * is left: the couple space if it still exists, the private profile, logs,
+ * settings and vault, private files, and any open invite.
+ */
+export const onAccountDeleted = authV1.user().onDelete(async (user) => {
+  const uid = user.uid;
+  const userRef = db.doc(`users/${uid}`);
+  const cid = (await userRef.get()).data()?.coupleId as string | null | undefined;
+  if (cid) {
+    const couple = await db.doc(`couples/${cid}`).get();
+    // Deleting the couple doc runs onCoupleDeleted, which removes the shared space for both.
+    if (couple.exists && (couple.data()?.members ?? []).includes(uid)) await couple.ref.delete();
+  }
+  await db.recursiveDelete(userRef);
+  await getStorage().bucket().deleteFiles({ prefix: `users/${uid}/` });
+  const invites = await db.collection('invites').where('fromUid', '==', uid).where('status', '==', 'open').get();
+  await Promise.all(invites.docs.map((d) => d.ref.update({ status: 'cancelled' })));
+  logger.info('Account data removed', { uid });
 });
 
 async function deleteMediaDoc(cid: string, mediaId: string) {

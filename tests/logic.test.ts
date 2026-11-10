@@ -257,3 +257,79 @@ describe('love languages, plant, streaks', () => {
     assert.equal(coupleStreak({ ...days, '2026-11-09': ['a', 'b'] }, ['a', 'b'], keys), 3);
   });
 });
+
+import { dueDateFor, isForMe, sortTodos, todayList, todoBucket, whenFor, type Todo } from '../src/lib/todos-pure';
+import { balanceLine, freeSlots, planSummary, plansIn, upcomingWeekend } from '../src/lib/weekend-pure';
+
+const todo = (over: Partial<Todo>): Todo => ({ id: 'x', text: 'x', forUid: 'both', dueDate: null, important: false, done: false, addedBy: 'a', ...over });
+
+describe('shared to-dos (gentle, never overdue)', () => {
+  test('"this week" means by the coming Sunday; today and someday as expected', () => {
+    const tue = new Date(2026, 10, 10); // Tuesday 10 Nov 2026
+    assert.equal(dueDateFor('today', tue), '2026-11-10');
+    assert.equal(dueDateFor('week', tue), '2026-11-15');
+    assert.equal(dueDateFor('someday', tue), null);
+    // On a Sunday, "this week" rolls to the next Sunday rather than today.
+    assert.equal(dueDateFor('week', new Date(2026, 10, 15)), '2026-11-22');
+  });
+
+  test('anything due earlier simply shows under Today, with no "late" bucket', () => {
+    assert.equal(todoBucket({ done: false, dueDate: '2026-11-01' }, '2026-11-10'), 'today');
+    assert.equal(todoBucket({ done: false, dueDate: '2026-11-12' }, '2026-11-10'), 'soon');
+    assert.equal(todoBucket({ done: false, dueDate: null }, '2026-11-10'), 'someday');
+    assert.equal(todoBucket({ done: true, dueDate: '2026-11-01' }, '2026-11-10'), 'done');
+    assert.equal(whenFor('2026-11-01', '2026-11-10'), 'today');
+  });
+
+  test('important first, then soonest, done last', () => {
+    const list = sortTodos([
+      todo({ id: 'done', done: true, important: true }),
+      todo({ id: 'someday' }),
+      todo({ id: 'soon', dueDate: '2026-11-12' }),
+      todo({ id: 'star', important: true, dueDate: '2026-11-14' }),
+    ]);
+    assert.deepEqual(list.map((t) => t.id), ['star', 'soon', 'someday', 'done']);
+  });
+
+  test("today's list is mine or shared, open, and due by today", () => {
+    const list = [
+      todo({ id: 'mine', forUid: 'a', dueDate: '2026-11-10' }),
+      todo({ id: 'both', dueDate: '2026-11-09' }),
+      todo({ id: 'theirs', forUid: 'b', dueDate: '2026-11-10' }),
+      todo({ id: 'later', forUid: 'a', dueDate: '2026-11-12' }),
+      todo({ id: 'ticked', forUid: 'a', dueDate: '2026-11-10', done: true }),
+    ];
+    assert.deepEqual(todayList(list, 'a', '2026-11-10').map((t) => t.id).sort(), ['both', 'mine']);
+    assert.equal(isForMe(todo({ forUid: 'b' }), 'a'), false);
+  });
+});
+
+describe('weekend planner', () => {
+  test('plans the coming weekend, or this one while it is happening', () => {
+    assert.deepEqual(upcomingWeekend(new Date(2026, 10, 10)), ['2026-11-14', '2026-11-15']); // Tuesday
+    assert.deepEqual(upcomingWeekend(new Date(2026, 10, 14)), ['2026-11-14', '2026-11-15']); // Saturday
+    assert.deepEqual(upcomingWeekend(new Date(2026, 10, 15)), ['2026-11-14', '2026-11-15']); // Sunday
+    assert.deepEqual(upcomingWeekend(new Date(2026, 10, 16)), ['2026-11-21', '2026-11-22']); // Monday
+  });
+
+  test('counts free slots and nudges kindly toward rest', () => {
+    const days = ['2026-11-14', '2026-11-15'];
+    const plans = [
+      { date: '2026-11-14', slot: 'morning' as const, text: 'Slow breakfast' },
+      { date: '2026-11-14', slot: 'morning' as const, text: 'Market' },
+      { date: '2026-11-15', slot: 'evening' as const, text: 'Mum’s dinner' },
+    ];
+    assert.equal(freeSlots(plans, days), 4);
+    assert.equal(plansIn(plans, '2026-11-14', 'morning').length, 2);
+    assert.match(balanceLine(0, 6), /keep one empty/);
+    assert.match(balanceLine(6, 6), /Rest is a plan too/);
+    const summary = planSummary(plans, days);
+    assert.match(summary, /Slow breakfast, Market/);
+    assert.match(summary, /Mum’s dinner/);
+  });
+
+  test('to-do and weekend copy stays gentle', () => {
+    const lines = [empty.todos, empty.todosToday, empty.weekendSlot, empty.starred, balanceLine(0, 6), balanceLine(3, 6)];
+    for (const l of lines) assert.doesNotMatch(l, /overdue|late|failed|missed|must/i);
+  });
+});

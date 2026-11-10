@@ -25,6 +25,9 @@ Legend: ✓ = built. Everything listed is now built.
 | `couples/{cid}/media/{id}.hiddenUntil` | Timestamp | surprise media: partner can't read the record **or the file** until then |
 | `couples/{cid}/garden/plant` | `{ points, lastCareBy }` | grows by 1–3 per write, never shrinks |
 | `couples/{cid}/care/{date}` | `{ who: uid[] }` | each adds only themselves (for couple streaks) |
+| `couples/{cid}/messages/{id}.important` | `bool` + `importantBy` | starred note, pinned for both; either stars, only as themselves |
+| `couples/{cid}/todos/{id}` | `{ text, forUid (uid or 'both'), dueDate (YYYY-MM-DD or null), important, done, doneBy?, doneAt?, addedBy, fromMessageId?, createdAt }` | both add, tick, star, remove; a tick is signed by whoever ticks |
+| `couples/{cid}/plans/{id}` | `{ date, slot: morning/afternoon/evening, text, addedBy, todoId?, createdAt }` | weekend planner; both add, move, remove |
 
 Storage reads are now `get`-only (no listing). A partner can fetch a file only once its Firestore record exists and isn't hidden.
 
@@ -53,6 +56,7 @@ Nothing is shared until the invited partner taps **Accept**.
 | | | Video (60s, poster frame), view-once, disappearing (24h), transcripts | P2 ✓ |
 | | | Scheduled sends, surprise notes | P3 ✓ |
 | **Together** | `/(tabs)/together` | Memory Jar (photo + voice + caption + date) | MVP |
+| | | To-dos and weekend planner tiles | ✓ |
 | | | Gratitude Wall, mood calendar | P2 ✓ |
 | | | Argument Reset, love languages | P2 ✓ |
 | | | Milestones, Date Night Generator, mascot/plant | P3 ✓ |
@@ -77,6 +81,8 @@ Nothing is shared until the invited partner taps **Accept**.
 | Mood calendar (month, side by side) | `/mood-calendar` | P2 ✓ |
 | Storage and free up space | `/storage` | P2 ✓ |
 | Private media vault | `/vault` | P2 ✓ |
+| Shared to-dos (who, when, starred; never overdue) | `/todos` | ✓ |
+| Weekend planner (Sat/Sun × morning/afternoon/evening) | `/weekend` | ✓ |
 
 ---
 

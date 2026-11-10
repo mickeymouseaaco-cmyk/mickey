@@ -92,6 +92,8 @@ function Navigator() {
         <Stack.Screen name="bucket-list" options={{ title: 'Our bucket list' }} />
         <Stack.Screen name="date-night" options={{ title: 'Date night ideas' }} />
         <Stack.Screen name="milestones" options={{ title: 'Milestones' }} />
+        <Stack.Screen name="todos" options={{ title: 'Our to-dos' }} />
+        <Stack.Screen name="weekend" options={{ title: 'This weekend' }} />
         <Stack.Screen name="schedule-note" options={{ title: 'Schedule a note', presentation: 'modal' }} />
         <Stack.Screen name="memory-new" options={{ title: 'New memory', presentation: 'modal' }} />
         <Stack.Screen name="memory/[id]" options={{ title: 'Memory' }} />

@@ -24,7 +24,12 @@ type Ctx = { cid: string; uid: string; partnerId: string };
 
 const messagesCol = (cid: string) => collection(db, 'couples', cid, 'messages');
 
-export async function sendText(ctx: Ctx, text: string, kind: Extract<MessageKind, 'text' | 'quick'> = 'text') {
+export async function sendText(
+  ctx: Ctx,
+  text: string,
+  kind: Extract<MessageKind, 'text' | 'quick'> = 'text',
+  opts: { important?: boolean } = {},
+) {
   const body = text.trim();
   if (!body) return;
   await setDoc(doc(messagesCol(ctx.cid)), {
@@ -33,6 +38,7 @@ export async function sendText(ctx: Ctx, text: string, kind: Extract<MessageKind
     kind,
     text: body.slice(0, 2000),
     favoriteBy: [],
+    ...(opts.important ? { important: true, importantBy: ctx.uid } : null),
     createdAt: serverTimestamp(),
   });
   void care(ctx);
@@ -54,6 +60,19 @@ export async function toggleFavorite(cid: string, uid: string, m: Message) {
   await updateDoc(doc(db, 'couples', cid, 'messages', m.id), {
     favoriteBy: on ? arrayUnion(uid) : arrayRemove(uid),
   });
+}
+
+/** Star a note as important (pinned for both of you), or unstar it. Either person can. */
+export async function toggleImportant(cid: string, uid: string, m: Message) {
+  await updateDoc(doc(db, 'couples', cid, 'messages', m.id), {
+    important: !m.important,
+    importantBy: uid,
+  });
+}
+
+/** Starred notes, newest first, that can still be read (not faded, not view-once). */
+export function starredNotes(messages: Message[], now: number = Date.now()): Message[] {
+  return messages.filter((m) => m.important && !m.viewOnce && !isFaded(m, now));
 }
 
 export async function markRead(cid: string, m: Message) {

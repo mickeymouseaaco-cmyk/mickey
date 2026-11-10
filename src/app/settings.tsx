@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { signOut } from 'firebase/auth';
 import { doc, updateDoc } from 'firebase/firestore';
-import { ChevronRight, Eye, HardDrive, Lock, LogOut, Unlink } from 'lucide-react-native';
+import { ChevronRight, Eye, HardDrive, Lock, LogOut, Trash, Unlink } from 'lucide-react-native';
 import { useState } from 'react';
 import { Platform, Pressable, TextInput, View } from 'react-native';
 
 import { Sheet, useFeedback } from '@/components/feedback';
 import { PinSetup } from '@/components/overlays';
 import { Button, Card, Chip, Field, Gap, Row, Screen, SectionTitle, T, ToggleRow, useInputStyle } from '@/components/ui';
+import { deleteMyAccount } from '@/lib/account';
 import { gentleError } from '@/lib/copy';
 import { auth, db } from '@/lib/firebase';
 import { useLock } from '@/lib/lock';
@@ -27,6 +28,18 @@ export default function Settings() {
   const [name, setName] = useState(profile?.displayName ?? '');
   const [settingPin, setSettingPin] = useState(false);
   const [confirmUnpair, setConfirmUnpair] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [password, setPassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteAccount() {
+    if (!uid || !password) return;
+    setDeleting(true);
+    const result = await deleteMyAccount({ uid, cid, password });
+    setDeleting(false);
+    if (result === 'deleted') return; // signed out; the app returns to the welcome screen
+    toast(result === 'wrong-password' ? 'That password didn’t match. Could you try again?' : gentleError.save);
+  }
 
   async function saveName() {
     if (!uid || !name.trim() || name.trim() === profile?.displayName) return;
@@ -175,6 +188,49 @@ export default function Settings() {
         <Gap h={space.sm} />
         <Button kind="ghost" icon={LogOut} label="Sign out" onPress={() => signOut(auth)} />
       </Card>
+
+      <Gap h={space.xl} />
+      <Button testID="delete-account" kind="quiet" small icon={Trash} label="Delete my account" onPress={() => setConfirmDelete(true)} />
+
+      <Sheet
+        visible={confirmDelete}
+        onClose={() => {
+          setConfirmDelete(false);
+          setPassword('');
+        }}>
+        <T variant="title" center>
+          Delete your account?
+        </T>
+        <Gap h={space.sm} />
+        <T muted center>
+          {cid
+            ? `This removes everything: your private logs, your vault, and the space you share with ${partnerName}, for both of you. It can’t be undone.`
+            : 'This removes everything: your private logs, your vault and your sign-in. It can’t be undone.'}
+        </T>
+        <Gap h={space.lg} />
+        <Field label="Your password, to confirm it's you">
+          <TextInput
+            testID="delete-password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+            autoComplete="current-password"
+            textContentType="password"
+            style={input}
+          />
+        </Field>
+        <Gap h={space.lg} />
+        <Button testID="confirm-delete-account" label="Delete everything" loading={deleting} disabled={!password} onPress={deleteAccount} />
+        <Gap h={space.sm} />
+        <Button
+          label="Keep my account"
+          kind="ghost"
+          onPress={() => {
+            setConfirmDelete(false);
+            setPassword('');
+          }}
+        />
+      </Sheet>
 
       <Sheet visible={confirmUnpair} onClose={() => setConfirmUnpair(false)}>
         <T variant="title" center>

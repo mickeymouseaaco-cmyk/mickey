@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
-import { CalendarClock, Camera, Clock, Gift, Heart, ImagePlus, Mail, Mic, Send, Trash, Video, X } from 'lucide-react-native';
+import { CalendarClock, Camera, Check, Clock, Gift, Heart, ImagePlus, ListTodo, Mail, Mic, Send, Star, Trash, Video, X } from 'lucide-react-native';
 import { useCallback, useState } from 'react';
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -17,9 +17,10 @@ import { pickPhoto, pickVideo, queuePhotoNote, queueVideoNote, queueVoiceNote, t
 import { relativeTime } from '@/lib/dates';
 import { haptic } from '@/lib/haptics';
 import { LIMITS, type PreparedImage } from '@/lib/media';
-import { deleteMessage, isFaded, markRead, sendText, toggleFavorite, useMessages } from '@/lib/messages';
+import { deleteMessage, isFaded, markRead, sendText, starredNotes, toggleFavorite, toggleImportant, useMessages } from '@/lib/messages';
 import { usePaired } from '@/lib/session';
 import { cancelScheduled, openSurprise, toggleScheduledFavorite, useDeliveredToMe, useMyScheduled, type ScheduledNote } from '@/lib/together-data';
+import { addTodo, dueDateFor, useTodos } from '@/lib/todos';
 import type { Message } from '@/lib/types';
 import { radius, space, useTheme } from '@/theme';
 
@@ -64,8 +65,11 @@ export default function LoveNotes() {
   const params = useLocalSearchParams<{ compose?: string }>();
   const { messages, ready, error } = useMessages(cid);
   const pending = useOutbox((j) => j.uid === uid && j.cid === cid && j.target.kind === 'message');
-  const [filter, setFilter] = useState<'all' | 'saved'>('all');
+  const [filter, setFilter] = useState<'all' | 'starred' | 'saved'>('all');
   const [text, setText] = useState('');
+  const [important, setImportant] = useState(false);
+  const { todos } = useTodos(cid);
+  const todoFrom = new Set(todos.map((t) => t.fromMessageId).filter(Boolean));
   const [draftState, setDraftState] = useState<Draft | null>(null);
   // Opened from "Record a voice hug" on Their Day.
   const draft: Draft | null = draftState ?? (params.compose === 'voiceHug' ? { kind: 'voice', hug: true } : null);
@@ -94,7 +98,24 @@ export default function LoveNotes() {
     ...delivered.map((n) => ({ key: `s-${n.id}`, at: n.deliverAt.toMillis(), s: n })),
     ...mySched.filter((n) => n.deliverAt.toMillis() <= now).map((n) => ({ key: `s-${n.id}`, at: n.deliverAt.toMillis(), s: n })),
   ].sort((a, b) => b.at - a.at);
-  const shown = filter === 'saved' ? feed.filter((f) => (f.m ?? f.s)!.favoriteBy?.length) : feed;
+  const shown =
+    filter === 'saved'
+      ? feed.filter((f) => (f.m ?? f.s)!.favoriteBy?.length)
+      : filter === 'starred'
+        ? feed.filter((f) => f.m?.important && !f.m.viewOnce)
+        : feed;
+  const pinned = starredNotes(visible).slice(0, 3);
+
+  async function noteToTodo(m: Message) {
+    if (todoFrom.has(m.id)) return router.push('/todos');
+    try {
+      await addTodo(who, { text: m.text ?? '', forUid: 'both', dueDate: dueDateFor('week'), fromMessageId: m.id });
+      haptic.success();
+      toast('Added to your shared to-dos.');
+    } catch {
+      toast(gentleError.save);
+    }
+  }
   const [showWaiting, setShowWaiting] = useState(false);
 
   function open(d: Draft) {
@@ -106,12 +127,15 @@ export default function LoveNotes() {
   async function sendTyped() {
     const body = text.trim();
     if (!body) return;
+    const star = important;
     setText('');
+    setImportant(false);
     try {
-      await sendText(who, body);
+      await sendText(who, body, 'text', { important: star });
       haptic.soft();
     } catch {
       setText(body);
+      setImportant(star);
       toast(gentleError.send);
     }
   }
@@ -192,11 +216,35 @@ export default function LoveNotes() {
                 </Row>
               ))
             : null}
+          {pinned.length && filter === 'all' ? (
+            <Pressable
+              testID="pinned-notes"
+              accessibilityRole="button"
+              accessibilityLabel={`${pinned.length} starred ${pinned.length === 1 ? 'note' : 'notes'} to remember. Tap to see all starred notes`}
+              onPress={() => setFilter('starred')}
+              style={{ backgroundColor: c.butter, borderRadius: radius.md, padding: space.md, gap: space.xs }}>
+              <Row gap={space.sm}>
+                <Star color={c.onButter} fill={c.onButter} size={16} />
+                <T variant="bodyStrong" color={c.onButter} style={{ flex: 1 }}>
+                  To remember
+                </T>
+                <T variant="small" color={c.onButter}>
+                  See all
+                </T>
+              </Row>
+              {pinned.map((m) => (
+                <T key={m.id} testID="pinned-note" color={c.onButter} numberOfLines={1}>
+                  {m.text || (m.kind === 'photo' ? 'A photo' : m.kind === 'video' ? 'A video' : m.kind === 'voice' ? 'A voice note' : 'A hug')}
+                </T>
+              ))}
+            </Pressable>
+          ) : null}
           <Segmented
             value={filter}
             onChange={setFilter}
             options={[
               { value: 'all', label: 'All notes' },
+              { value: 'starred', label: 'Starred' },
               { value: 'saved', label: 'Saved' },
             ]}
           />
@@ -223,7 +271,10 @@ export default function LoveNotes() {
                 {pending.map((j) => (
                   <OutboxRow key={j.id} job={j} />
                 ))}
-                <EmptyState icon={filter === 'saved' ? Heart : Mail} line={error ? gentleError.load : filter === 'saved' ? empty.favorites : empty.notes} />
+                <EmptyState
+                  icon={filter === 'saved' ? Heart : filter === 'starred' ? Star : Mail}
+                  line={error ? gentleError.load : filter === 'saved' ? empty.favorites : filter === 'starred' ? empty.starred : empty.notes}
+                />
               </View>
             ) : undefined
           }
@@ -236,6 +287,14 @@ export default function LoveNotes() {
                 cid={cid}
                 partnerName={partnerName}
                 onHeart={() => toggleFavorite(cid, uid, item.m!).catch(() => toast(gentleError.save))}
+                onStar={() => {
+                  const m = item.m!;
+                  toggleImportant(cid, uid, m)
+                    .then(() => toast(m.important ? 'Unstarred.' : 'Starred. It stays pinned so you both remember.'))
+                    .catch(() => toast(gentleError.save));
+                }}
+                inTodos={todoFrom.has(item.m.id)}
+                onTodo={() => noteToTodo(item.m!)}
                 onTakeBack={() => setConfirmDelete(item.m!)}
               />
             ) : (
@@ -245,6 +304,27 @@ export default function LoveNotes() {
         />
 
         <View style={{ borderTopWidth: 1, borderTopColor: c.border, backgroundColor: c.surface, padding: space.md, gap: space.sm }}>
+          {text.trim() ? (
+            <Pressable
+              testID="mark-important"
+              accessibilityRole="switch"
+              accessibilityLabel="Mark as important"
+              accessibilityHint="Pins this note for both of you so it isn't forgotten"
+              accessibilityState={{ checked: important }}
+              onPress={() => {
+                haptic.tap();
+                setImportant((v) => !v);
+              }}
+              hitSlop={6}
+              style={{ width: '100%', maxWidth: 560, alignSelf: 'center', minHeight: 36, justifyContent: 'center' }}>
+              <Row gap={6}>
+                <Star color={important ? c.onButter : c.textMuted} fill={important ? c.onButter : 'transparent'} size={16} />
+                <T variant="small" color={important ? c.onButter : c.textMuted}>
+                  {important ? 'Important: pinned for you both' : 'Mark as important'}
+                </T>
+              </Row>
+            </Pressable>
+          ) : null}
           <Row gap={space.xs} style={{ width: '100%', maxWidth: 560, alignSelf: 'center' }}>
             <IconButton testID="attach-camera" icon={Camera} label="Take a photo" size={44} onPress={() => startPhoto('camera')} />
             <IconButton testID="attach-photo" icon={ImagePlus} label="Choose a photo" size={44} onPress={() => startPhoto('library')} />
@@ -451,6 +531,9 @@ function Bubble({
   cid,
   partnerName,
   onHeart,
+  onStar,
+  onTodo,
+  inTodos,
   onTakeBack,
 }: {
   m: Message;
@@ -459,6 +542,9 @@ function Bubble({
   cid: string;
   partnerName: string;
   onHeart: () => void;
+  onStar: () => void;
+  onTodo: () => void;
+  inTodos: boolean;
   onTakeBack: () => void;
 }) {
   const { c } = useTheme();
@@ -466,6 +552,8 @@ function Bubble({
   const fg = mine ? c.onPrimary : c.text;
   const when = relativeTime(m.createdAt?.toDate?.() ?? null);
   const fade = fadesIn(m);
+  const canStar = !m.viewOnce;
+  const canTodo = !!m.text && !m.viewOnce && m.kind !== 'hug';
 
   let body: React.ReactNode;
   if (m.kind === 'hug') {
@@ -512,7 +600,15 @@ function Bubble({
         }}>
         {body}
       </Pressable>
-      <Row gap={space.xs} style={{ marginTop: 2 }}>
+      {m.important && canStar ? (
+        <Row gap={4} style={{ marginTop: 4 }}>
+          <Star color={c.onButter} fill={c.onButter} size={12} />
+          <T testID="important-badge" variant="small" color={c.onButter}>
+            Important
+          </T>
+        </Row>
+      ) : null}
+      <Row gap={space.xs} style={{ marginTop: 2, flexWrap: 'wrap', justifyContent: mine ? 'flex-end' : 'flex-start' }}>
         {fade ? <Clock color={c.textMuted} size={13} accessibilityLabel="Disappearing note" /> : null}
         <T variant="small" muted>
           {when}
@@ -532,6 +628,32 @@ function Bubble({
             hitSlop={10}
             style={{ padding: 8 }}>
             <Heart color={fav ? c.heart : c.textMuted} fill={fav ? c.heart : 'transparent'} size={18} />
+          </Pressable>
+        ) : null}
+        {canStar ? (
+          <Pressable
+            testID={`star-${m.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={m.important ? 'Unstar this note' : 'Star this note to remember it'}
+            accessibilityState={{ selected: !!m.important }}
+            onPress={() => {
+              haptic.tap();
+              onStar();
+            }}
+            hitSlop={10}
+            style={{ padding: 8 }}>
+            <Star color={m.important ? c.onButter : c.textMuted} fill={m.important ? c.onButter : 'transparent'} size={18} />
+          </Pressable>
+        ) : null}
+        {canTodo ? (
+          <Pressable
+            testID={`todo-${m.id}`}
+            accessibilityRole="button"
+            accessibilityLabel={inTodos ? 'Already in your to-dos. Open the list' : 'Add this to your shared to-dos'}
+            onPress={onTodo}
+            hitSlop={10}
+            style={{ padding: 8 }}>
+            {inTodos ? <Check color={c.textMuted} size={18} /> : <ListTodo color={c.textMuted} size={18} />}
           </Pressable>
         ) : null}
         {mine ? (

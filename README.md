@@ -6,6 +6,7 @@ Built with **Expo SDK 58 (React Native 0.88, Expo Router)** and **Firebase** (Au
 
 - Screens and data model: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
 - Screenshots from the two-partner end-to-end run: [`docs/screens/`](docs/screens)
+- **Putting it on your phones and in the stores:** [`docs/DEPLOY.md`](docs/DEPLOY.md)
 
 ## What's built (MVP + Phase 2 + Phase 3)
 
@@ -43,6 +44,10 @@ Built with **Expo SDK 58 (React Native 0.88, Expo Router)** and **Firebase** (Au
 | **Phase 3: Scheduled & surprise notes** | Send a note later, hide a surprise that unlocks on a date, or one waiting for "next time they open the app". Text, photo or voice. The recipient can't read it, or its photo, until it unlocks (rules + storage rules); surprises arrive wrapped and open with confetti |
 | **Phase 3: Shared plant** | Grows a little whenever either of you logs, checks in, thanks, hugs or sends love (capped per day). Six stages from seed to flourishing; it never wilts. Couple streaks count days you both cared, celebrated at 3, 7, 14, 30 and 60 |
 | **Phase 3: Delight** | Confetti for small wins: step goal reached, both said thank you today, plant grew, streak milestone, everything packed, surprise unwrapped, two calm minutes. It's skipped under Reduce Motion (haptic and kind message instead) |
+| **Starred notes** | Star any love note as important. It's pinned in a "To remember" strip for both people, has its own **Starred** filter, and can be starred while writing. Either person can star or unstar. |
+| **Shared to-dos** | One gentle list for both: for me, for my partner, or for both of us; today, this week, or someday; star the important ones so they stay on top. Anything earlier simply shows under Today, so nothing is ever "overdue". Turn any love note into a to-do in one tap. Today shows what's on your plate. |
+| **Weekend planner** | The coming Saturday and Sunday in morning, afternoon and evening slots. Both add and remove plans live, from your own words, gentle ideas, a date idea or open to-dos. A free-slot count and a kind nudge to leave room to rest. Send the plan as a love note. |
+| **Delete my account** | Settings → Delete my account (password to confirm). Unpairs, removes the shared space for both, then the `onAccountDeleted` function removes private logs, vault and files. Required by both app stores. |
 | **Phase 3: Widget** | iOS home screen widget (expo-widgets) showing the latest kind word from your partner |
 
 ## Run it locally (no Firebase account needed)
@@ -75,15 +80,16 @@ Press `w` for web, or scan the QR code with a development build. On a real phone
    ```bash
    npx --prefix firebase/tests firebase deploy --only firestore,storage,functions --project <your-project-id>
    ```
-4. For push notifications, run `npx eas-cli@latest init` so `extra.eas.projectId` is set, then build a development client (`eas build --profile development`). Users turn alerts on in **Settings → Notifications**.
+4. For push notifications, run `npx eas-cli@latest init` so `extra.eas.projectId` is set. Users turn alerts on in **Settings → Notifications**.
+5. To build installable apps and publish to the App Store and Google Play, follow [`docs/DEPLOY.md`](docs/DEPLOY.md). (The `development` profile in `eas.json` needs `npx expo install expo-dev-client` first.)
 
 ## Tests
 
 ```bash
 npm run typecheck      # TypeScript
 npm run lint           # ESLint (expo config, React Compiler rules)
-npm run test:unit      # 30 tests: sharing, suggestions, love languages, cycle, gratitude, trips, packing, ideas, milestones, plant, streaks, tone
-npm run test:rules     # 38 security-rule tests on the emulators (privacy guarantees)
+npm run test:unit      # 37 tests: sharing, suggestions, love languages, cycle, gratitude, trips, packing, ideas, milestones, plant, streaks, tone, to-dos, weekend planner
+npm run test:rules     # 41 security-rule tests on the emulators (privacy guarantees)
 ```
 
 **End to end, with two partners in two browser sessions against the emulators:**

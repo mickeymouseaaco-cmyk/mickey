@@ -579,3 +579,68 @@ describe('love languages, plant, trips', () => {
     await assertFails(updateDoc(doc(db(B), `couples/${CID}/trips/t1`), { [`stress.${A}`]: 1 }));
   });
 });
+
+describe('starred notes, shared to-dos and the weekend planner', () => {
+  test('either partner can star a note as important; only as themselves', async () => {
+    await seedCouple();
+    await assertSucceeds(
+      setDoc(doc(db(A), `couples/${CID}/messages/s1`), {
+        fromUid: A, toUid: B, kind: 'text', text: 'Mum’s dinner, Sunday at 7', favoriteBy: [], important: true, importantBy: A, createdAt: serverTimestamp(),
+      }),
+    );
+    // Can't send a note pretending the partner starred it.
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/messages/s2`), {
+        fromUid: A, toUid: B, kind: 'text', text: 'x', favoriteBy: [], important: true, importantBy: B, createdAt: serverTimestamp(),
+      }),
+    );
+    await assertSucceeds(updateDoc(doc(db(B), `couples/${CID}/messages/s1`), { important: false, importantBy: B }));
+    await assertFails(updateDoc(doc(db(B), `couples/${CID}/messages/s1`), { important: true, importantBy: A }));
+    await assertFails(updateDoc(doc(db(B), `couples/${CID}/messages/s1`), { important: true, importantBy: B, text: 'edited' }));
+    await assertFails(updateDoc(doc(db(EVE), `couples/${CID}/messages/s1`), { important: true, importantBy: EVE }));
+  });
+
+  test('to-dos: both add, tick and star; ticks are signed by whoever ticks; outsiders see nothing', async () => {
+    await seedCouple();
+    const t = doc(db(A), `couples/${CID}/todos/t1`);
+    await assertSucceeds(
+      setDoc(t, { text: 'Book the ryokan', forUid: 'both', dueDate: '2026-11-15', important: true, done: false, addedBy: A, createdAt: serverTimestamp() }),
+    );
+    await assertSucceeds(
+      setDoc(doc(db(A), `couples/${CID}/todos/t2`), { text: 'Someday', forUid: B, dueDate: null, important: false, done: false, addedBy: A, createdAt: serverTimestamp() }),
+    );
+    // Not for strangers, not pre-ticked, not added in someone else's name.
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/todos/t3`), { text: 'x', forUid: EVE, dueDate: null, important: false, done: false, addedBy: A, createdAt: serverTimestamp() }),
+    );
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/todos/t4`), { text: 'x', forUid: 'both', dueDate: null, important: false, done: true, addedBy: A, createdAt: serverTimestamp() }),
+    );
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/todos/t5`), { text: 'x', forUid: 'both', dueDate: null, important: false, done: false, addedBy: B, createdAt: serverTimestamp() }),
+    );
+    await assertSucceeds(updateDoc(doc(db(B), `couples/${CID}/todos/t1`), { done: true, doneBy: B, doneAt: serverTimestamp() }));
+    await assertFails(updateDoc(doc(db(B), `couples/${CID}/todos/t1`), { doneBy: A }));
+    await assertSucceeds(updateDoc(doc(db(B), `couples/${CID}/todos/t1`), { important: false }));
+    await assertFails(updateDoc(doc(db(B), `couples/${CID}/todos/t1`), { addedBy: B }));
+    await assertFails(getDoc(doc(db(EVE), `couples/${CID}/todos/t1`)));
+    await assertSucceeds(deleteDoc(doc(db(B), `couples/${CID}/todos/t1`)));
+  });
+
+  test('weekend plans: both add and remove, only in real slots; outsiders see nothing', async () => {
+    await seedCouple();
+    await assertSucceeds(
+      setDoc(doc(db(A), `couples/${CID}/plans/p1`), { date: '2026-11-14', slot: 'morning', text: 'Slow breakfast', addedBy: A, createdAt: serverTimestamp() }),
+    );
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/plans/p2`), { date: '2026-11-14', slot: 'midnight', text: 'x', addedBy: A, createdAt: serverTimestamp() }),
+    );
+    await assertFails(
+      setDoc(doc(db(A), `couples/${CID}/plans/p3`), { date: '2026-11-14', slot: 'evening', text: 'x', addedBy: B, createdAt: serverTimestamp() }),
+    );
+    await assertSucceeds(getDocs(query(collection(db(B), `couples/${CID}/plans`), where('date', 'in', ['2026-11-14', '2026-11-15']))));
+    await assertSucceeds(updateDoc(doc(db(B), `couples/${CID}/plans/p1`), { slot: 'afternoon' }));
+    await assertFails(getDoc(doc(db(EVE), `couples/${CID}/plans/p1`)));
+    await assertSucceeds(deleteDoc(doc(db(B), `couples/${CID}/plans/p1`)));
+  });
+});

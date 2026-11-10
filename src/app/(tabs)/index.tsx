@@ -6,6 +6,7 @@ import { Pressable, View } from 'react-native';
 import { ProgressRing, WeekBars } from '@/components/charts';
 import { FoodCardBody } from '@/components/food-card';
 import { StoredPrivateImage, StoredPrivateVoice } from '@/components/media-view';
+import { TodoRow } from '@/components/todo-row';
 import { DaySwitch, TopBar } from '@/components/headers';
 import { Button, Card, Gap, Row, Screen, SectionTitle, T } from '@/components/ui';
 import { STRESS_LABELS, empty, greeting, streakLine, summaryLine } from '@/lib/copy';
@@ -13,6 +14,7 @@ import { dayKey, lastNDays, timeOfDay } from '@/lib/dates';
 import { PHASE_LABEL, cycleToday, predictionLine } from '@/lib/cycle';
 import { syncCycleDay, useCycleSettings, useMyDays, useShareSettings } from '@/lib/logs';
 import { usePaired } from '@/lib/session';
+import { todayList, useTodos } from '@/lib/todos';
 import { space, useTheme } from '@/theme';
 
 /** Consecutive days (ending today or yesterday) with any check-in. Celebration only. */
@@ -60,6 +62,8 @@ export default function Today() {
   const streakText = streakLine(streak(days, month));
   const cycleSettings = useCycleSettings(uid);
   const cycle = day?.cycle ?? (cycleSettings ? cycleToday(cycleSettings, today) : null);
+  const { todos, ready: todosReady } = useTodos(cid);
+  const myToday = todayList(todos, uid, today);
 
   // Keep today's cycle day fresh (it changes at midnight, not when you log).
   const needsCycleSync = ready && !!cycleSettings?.enabled && !day?.cycle;
@@ -145,6 +149,29 @@ export default function Today() {
             <Button testID="log-mood" small kind="soft" label="Check in" onPress={() => router.push('/log-mood')} />
           </View>
         )}
+      </Card>
+      <Gap />
+
+      <Card>
+        <SectionTitle
+          right={
+            <Pressable testID="open-todos" accessibilityRole="link" onPress={() => router.push('/todos')} hitSlop={8} style={{ minHeight: 32, justifyContent: 'center' }}>
+              <T variant="small" color={c.primary}>
+                {myToday.length > 3 ? `See all ${myToday.length}` : 'See all'}
+              </T>
+            </Pressable>
+          }>
+          Today&apos;s to-dos
+        </SectionTitle>
+        {myToday.slice(0, 3).map((t) => (
+          <TodoRow key={t.id} t={t} uid={uid} cid={cid} partnerName={partnerName} compact />
+        ))}
+        {todosReady && myToday.length === 0 ? (
+          <View style={{ gap: space.md }}>
+            <T muted>{empty.todosToday}</T>
+            <Button testID="add-todo-today" small kind="soft" label="Add a to-do" onPress={() => router.push('/todos')} />
+          </View>
+        ) : null}
       </Card>
       <Gap />
 

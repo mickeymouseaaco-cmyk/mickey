@@ -146,8 +146,10 @@ service cloud.firestore {
         allow read: if isMember(cid);
 
         allow create: if isMember(cid)
-          && incoming().keys().hasOnly(['fromUid', 'toUid', 'kind', 'text', 'mediaId', 'voiceHug', 'viewOnce', 'expiresAt', 'favoriteBy', 'createdAt'])
+          && incoming().keys().hasOnly(['fromUid', 'toUid', 'kind', 'text', 'mediaId', 'voiceHug', 'viewOnce', 'expiresAt', 'favoriteBy',
+               'important', 'importantBy', 'createdAt'])
           && incoming().fromUid == me()
+          && (!('important' in incoming()) || (incoming().important is bool && incoming().importantBy == me()))
           && incoming().toUid != me()
           && incoming().toUid in coupleDoc(cid).data.members
           && incoming().kind in ['text', 'photo', 'voice', 'video', 'hug', 'quick']
@@ -169,6 +171,11 @@ service cloud.firestore {
             && incoming().favoriteBy is list
             && incoming().favoriteBy.toSet().difference(resource.data.favoriteBy.toSet()).hasOnly([me()])
             && resource.data.favoriteBy.toSet().difference(incoming().favoriteBy.toSet()).hasOnly([me()])
+          ) || (
+            // Star as important: either person, pinned for both.
+            changed().hasOnly(['important', 'importantBy'])
+            && incoming().important is bool
+            && incoming().importantBy == me()
           ) || (
             changed().hasOnly(['readAt'])
             && resource.data.toUid == me()
@@ -370,6 +377,55 @@ service cloud.firestore {
             || (changed().hasOnly(['openedAt']) && incoming().openedAt == request.time)
           );
         allow delete: if isMember(cid) && resource.data.fromUid == me();
+      }
+
+      // ---- Shared to-dos: one doc per item. Both add, tick, star and remove.
+      match /todos/{todoId} {
+        allow read: if isMember(cid);
+        allow create: if isMember(cid)
+          && incoming().keys().hasOnly(['text', 'forUid', 'dueDate', 'important', 'done', 'addedBy', 'fromMessageId', 'createdAt'])
+          && incoming().addedBy == me()
+          && str(incoming().text, 300)
+          && incoming().text.size() > 0
+          && (incoming().forUid == 'both' || incoming().forUid in coupleDoc(cid).data.members)
+          && (incoming().dueDate == null || (incoming().dueDate is string && incoming().dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+          && incoming().important is bool
+          && incoming().done == false
+          && (!('fromMessageId' in incoming()) || incoming().fromMessageId is string)
+          && incoming().createdAt == request.time;
+        allow update: if isMember(cid)
+          && changed().hasOnly(['text', 'forUid', 'dueDate', 'important', 'done', 'doneBy', 'doneAt'])
+          && str(incoming().text, 300)
+          && incoming().text.size() > 0
+          && (incoming().forUid == 'both' || incoming().forUid in coupleDoc(cid).data.members)
+          && (incoming().dueDate == null || (incoming().dueDate is string && incoming().dueDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')))
+          && incoming().important is bool
+          && incoming().done is bool
+          && (!('doneBy' in changed()) || incoming().doneBy == me())
+          && (!('doneAt' in changed()) || incoming().doneAt == request.time);
+        allow delete: if isMember(cid);
+      }
+
+      // ---- Weekend planner: small plans in morning / afternoon / evening slots.
+      match /plans/{planId} {
+        allow read: if isMember(cid);
+        allow create: if isMember(cid)
+          && incoming().keys().hasOnly(['date', 'slot', 'text', 'addedBy', 'todoId', 'createdAt'])
+          && incoming().addedBy == me()
+          && incoming().date is string
+          && incoming().date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && incoming().slot in ['morning', 'afternoon', 'evening']
+          && str(incoming().text, 200)
+          && incoming().text.size() > 0
+          && (!('todoId' in incoming()) || incoming().todoId is string)
+          && incoming().createdAt == request.time;
+        allow update: if isMember(cid)
+          && changed().hasOnly(['date', 'slot', 'text'])
+          && incoming().date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && incoming().slot in ['morning', 'afternoon', 'evening']
+          && str(incoming().text, 200)
+          && incoming().text.size() > 0;
+        allow delete: if isMember(cid);
       }
 
       // ---- The shared plant: grows a little whenever either of you cares.

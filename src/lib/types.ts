@@ -131,6 +131,9 @@ export type Message = {
   mediaId?: string;
   voiceHug?: boolean;
   favoriteBy: Uid[];
+  /** Starred as important: pinned for both people so it isn't forgotten. Either can star or unstar. */
+  important?: boolean;
+  importantBy?: Uid;
   readAt?: Timestamp;
   /** View-once note: the recipient can open it once. */
   viewOnce?: boolean;

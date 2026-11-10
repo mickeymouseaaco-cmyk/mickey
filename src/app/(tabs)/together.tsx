@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { CalendarDays, CalendarHeart, Dices, Gift, HandHeart, Heart, HeartHandshake, Mic, Plus, Sparkles } from 'lucide-react-native';
+import { CalendarDays, CalendarHeart, CalendarRange, Dices, Gift, HandHeart, Heart, HeartHandshake, ListTodo, Mic, Plus, Sparkles } from 'lucide-react-native';
 import { Pressable, View } from 'react-native';
 
 import { MediaById } from '@/components/media-view';
@@ -16,6 +16,8 @@ import type { Memory } from '@/lib/types';
 import { space, useTheme } from '@/theme';
 
 const RITUALS = [
+  { route: '/todos' as const, testID: 'open-todos-tile', icon: ListTodo, title: 'To-dos', detail: 'A shared, gentle list', tone: 'lavender' as const },
+  { route: '/weekend' as const, testID: 'open-weekend', icon: CalendarRange, title: 'This weekend', detail: 'A simple plan for two', tone: 'peach' as const },
   { route: '/gratitude' as const, testID: 'open-gratitude', icon: HandHeart, title: 'Gratitude Wall', detail: 'One thank-you a day', tone: 'butter' as const },
   { route: '/mood-calendar' as const, testID: 'open-mood-calendar', icon: CalendarDays, title: 'Our moods', detail: 'A month, side by side', tone: 'lavender' as const },
   { route: '/date-night' as const, testID: 'open-date-night', icon: Dices, title: 'Date night', detail: 'Ideas for any budget', tone: 'rose' as const },
